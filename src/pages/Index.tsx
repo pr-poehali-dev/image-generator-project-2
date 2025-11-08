@@ -1,13 +1,23 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent } from '@/components/ui/card';
 import Icon from '@/components/ui/icon';
 import { toast } from 'sonner';
 
+interface ReferenceImage {
+  id: string;
+  file: File;
+  preview: string;
+}
+
 const Index = () => {
   const [prompt, setPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
+  const [referenceImages, setReferenceImages] = useState<ReferenceImage[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const MAX_IMAGES = 10;
 
   const exampleImages = [
     {
@@ -24,6 +34,37 @@ const Index = () => {
     }
   ];
 
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    
+    if (referenceImages.length + files.length > MAX_IMAGES) {
+      toast.error(`Максимум ${MAX_IMAGES} изображений`);
+      return;
+    }
+
+    const newImages: ReferenceImage[] = files.map(file => ({
+      id: Math.random().toString(36).substr(2, 9),
+      file,
+      preview: URL.createObjectURL(file)
+    }));
+
+    setReferenceImages(prev => [...prev, ...newImages]);
+    
+    if (e.target) {
+      e.target.value = '';
+    }
+  };
+
+  const removeImage = (id: string) => {
+    setReferenceImages(prev => {
+      const image = prev.find(img => img.id === id);
+      if (image) {
+        URL.revokeObjectURL(image.preview);
+      }
+      return prev.filter(img => img.id !== id);
+    });
+  };
+
   const handleGenerate = () => {
     if (!prompt.trim()) {
       toast.error('Введите описание изображения');
@@ -34,7 +75,7 @@ const Index = () => {
     
     setTimeout(() => {
       setIsGenerating(false);
-      toast.success('Изображение создано! (Демо-режим)');
+      toast.success(`Изображение создано! (Демо-режим${referenceImages.length > 0 ? ` с ${referenceImages.length} референсами` : ''})`);
     }, 2000);
   };
 
@@ -84,6 +125,60 @@ const Index = () => {
                 </p>
               </div>
 
+              {/* Reference Images Section */}
+              <div className="space-y-3 pt-2 border-t">
+                <label className="text-sm font-medium flex items-center gap-2">
+                  <Icon name="Images" size={16} />
+                  Референсные изображения (до {MAX_IMAGES})
+                  <span className="text-muted-foreground font-normal">
+                    • Опционально
+                  </span>
+                </label>
+                
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={handleFileSelect}
+                  className="hidden"
+                />
+
+                {/* Reference Images Grid */}
+                <div className="grid grid-cols-5 gap-3">
+                  {referenceImages.map((image) => (
+                    <div key={image.id} className="relative group aspect-square">
+                      <img
+                        src={image.preview}
+                        alt="Reference"
+                        className="w-full h-full object-cover rounded-lg border-2 border-gray-200"
+                      />
+                      <button
+                        onClick={() => removeImage(image.id)}
+                        className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-lg hover:bg-red-600"
+                      >
+                        <Icon name="X" size={14} />
+                      </button>
+                    </div>
+                  ))}
+                  
+                  {/* Add Image Button */}
+                  {referenceImages.length < MAX_IMAGES && (
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      className="aspect-square border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center gap-1 hover:border-primary hover:bg-primary/5 transition-colors"
+                    >
+                      <Icon name="Plus" size={20} className="text-gray-400" />
+                      <span className="text-xs text-gray-500">Добавить</span>
+                    </button>
+                  )}
+                </div>
+
+                <p className="text-xs text-muted-foreground">
+                  Загрузите изображения для стилистического референса. ИИ будет учитывать их композицию, цветовую гамму и стиль при генерации.
+                </p>
+              </div>
+
               <Button 
                 onClick={handleGenerate}
                 disabled={isGenerating}
@@ -115,9 +210,9 @@ const Index = () => {
               description: 'Получите результат за секунды'
             },
             {
-              icon: 'Palette',
-              title: 'Любой стиль',
-              description: 'От реализма до абстракции'
+              icon: 'Images',
+              title: 'Референсы',
+              description: 'Загрузите до 10 референсных фото'
             },
             {
               icon: 'Download',
